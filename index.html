@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>四杆机构教学演示系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        /* 动画与样式增强 */
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .status-pulse {
+            animation: pulse-border 2s infinite;
+        }
+        canvas {
+            touch-action: none; /* 防止手机触摸时滚动页面 */
+        }
+        /* 优化滑块样式 */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800">
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2 tracking-tight">四杆机构教学演示</h1>
+            <p class="text-slate-500">基于格拉霍夫定理的实时运动仿真</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-4 space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                    <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center">
+                        <span class="w-1 h-6 bg-blue-500 rounded mr-2"></span>参数设置
+                    </h2>
+                    
+                    <div id="mechanismTypeContainer" class="mb-6 p-4 rounded-lg text-center transition-colors duration-300 bg-gray-100">
+                        <div class="text-sm text-slate-500 mb-1">当前判定类型</div>
+                        <div id="mechanismType" class="text-xl font-bold text-slate-800">计算中...</div>
+                    </div>
+
+                    <div class="mb-6">
+                        <div class="flex justify-between items-end mb-2">
+                            <label class="text-sm font-medium text-slate-600">机架长度 (d)</label>
+                            <span id="frameValue" class="text-xl font-bold text-blue-600">120 mm</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            id="frameLength" 
+                            min="40" 
+                            max="350" 
+                            step="1"
+                            value="120" 
+                            class="w-full mb-2"
+                        >
+                        <div class="flex justify-between text-xs text-slate-400 px-1">
+                            <span>40mm</span>
+                            <span>350mm</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 mb-6 text-sm">
+                        <div class="bg-slate-50 p-2 rounded text-center border">
+                            <div class="text-slate-400 text-xs">主动杆(a)</div>
+                            <div class="font-semibold text-red-500">90</div>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded text-center border">
+                            <div class="text-slate-400 text-xs">连杆(b)</div>
+                            <div class="font-semibold text-blue-500">210</div>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded text-center border">
+                            <div class="text-slate-400 text-xs">从动杆(c)</div>
+                            <div class="font-semibold text-green-500">150</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="toggleBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition shadow-md hover:shadow-lg flex justify-center items-center gap-2">
+                            <span id="playIcon">⏸</span> <span id="playText">暂停</span>
+                        </button>
+                        <button id="resetBtn" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2 px-4 rounded-lg transition">
+                            重置参数
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex flex-col items-center">
+                    <h2 class="text-lg font-bold text-slate-700 mb-4 w-full text-left">手机扫码互动</h2>
+                    <div class="relative group">
+                        <canvas id="qrcodeCanvas" class="border border-slate-100 rounded-lg p-2"></canvas>
+                        <div class="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg cursor-pointer" id="copyUrlBtn">
+                            点击复制链接
+                        </div>
+                    </div>
+                    <p class="text-xs text-center text-slate-400 mt-3 max-w-xs">
+                        扫描二维码或分享此页面，学生可在手机端同步查看演示。
+                    </p>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8">
+                <div class="bg-white rounded-xl shadow-md border border-slate-200 p-4 h-full min-h-[500px] flex flex-col">
+                    <div class="flex-1 relative w-full h-full flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden border border-slate-100">
+                        <canvas id="mechanismCanvas" class="block"></canvas>
+                        
+                        <div class="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm text-xs flex justify-center gap-4 border border-slate-100">
+                            <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-red-500"></div>主动杆</div>
+                            <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-blue-500"></div>连杆</div>
+                            <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-green-500"></div>从动杆</div>
+                            <div class="flex items-center gap-1"><div class="w-3 h-3 bg-black"></div>机架</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-8 text-center text-slate-400 text-xs py-4 border-t border-slate-200">
+            <p>演示系统 v2.0 | 仅供教学参考 | 根据浏览器窗口自动调整画布</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- 核心配置 ---
+        const config = {
+            a: 90,  // 主动杆
+            b: 210, // 连杆
+            c: 150, // 从动杆
+            d: 120, // 初始机架
+            scale: 0.8, // 基础缩放
+            speed: 0.03 // 旋转速度
+        };
+
+        // --- 状态变量 ---
+        let state = {
+            frameLength: config.d,
+            angle: 0,
+            isPlaying: true,
+            trackB: [], // B点轨迹
+            trackC: [], // C点轨迹
+            isValid: true // 机构是否可组装
+        };
+
+        // --- DOM 元素 ---
+        const els = {
+            canvas: document.getElementById('mechanismCanvas'),
+            slider: document.getElementById('frameLength'),
+            valDisplay: document.getElementById('frameValue'),
+            typeDisplay: document.getElementById('mechanismType'),
+            typeContainer: document.getElementById('mechanismTypeContainer'),
+            qrCanvas: document.getElementById('qrcodeCanvas'),
+            toggleBtn: document.getElementById('toggleBtn'),
+            playText: document.getElementById('playText'),
+            playIcon: document.getElementById('playIcon'),
+            resetBtn: document.getElementById('resetBtn'),
+            copyBtn: document.getElementById('copyUrlBtn')
+        };
+
+        let ctx = els.canvas.getContext('2d');
+        let animationId;
+
+        // --- 初始化 ---
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // 绑定事件
+            els.slider.addEventListener('input', handleSliderChange);
+            els.toggleBtn.addEventListener('click', togglePlay);
+            els.resetBtn.addEventListener('click', reset);
+            els.copyBtn.addEventListener('click', copyLink);
+
+            // 从 URL 参数读取机架长度 (实现扫码后状态同步)
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramFrame = urlParams.get('frame');
+            if (paramFrame) {
+                state.frameLength = parseInt(paramFrame);
+                els.slider.value = state.frameLength;
+            }
+
+            // 启动
+            updateMechanismState();
+            generateQRCode();
+            animate();
+        }
+
+        // --- 核心逻辑：格拉霍夫判定 ---
+        function updateMechanismState() {
+            const { a, b, c } = config;
+            const d = state.frameLength;
+            els.valDisplay.innerText = `${d} mm`;
+
+            // 排序四杆长度
+            const lens = [a, b, c, d].sort((x, y) => x - y);
+            const shortest = lens[0];
+            const longest = lens[3];
+            const others = lens[1] + lens[2];
+
+            let typeName = '';
+            let styleClass = '';
+
+            // 1. 判断是否构成四杆机构 (最长杆 < 其余三杆之和)
+            // 这里我们主要关注格拉霍夫条件：S + L <= P + Q
+            const grashof = (shortest + longest) <= (lens[1] + lens[2]);
+
+            if (grashof) {
+                // 满足格拉霍夫条件，有整转副
+                if (shortest === d) {
+                    typeName = '双曲柄机构 (Double Crank)';
+                    styleClass = 'bg-indigo-100 text-indigo-700 border-indigo-200';
+                } else if (shortest === a) {
+                    typeName = '曲柄摇杆机构 (Crank-Rocker)';
+                    styleClass = 'bg-green-100 text-green-700 border-green-200';
+                } else if (shortest === c) {
+                    // 实际上也是曲柄摇杆，但如果是从动杆最短，主动杆可能无法整周旋转，这里简化逻辑
+                    // 若a为主动且a不是最短，则a只能摆动 -> 这里的分类稍微复杂
+                    // 在本演示中a始终为主动件。
+                    // 修正逻辑：
+                    // 若满足Grashof且最短杆是连架杆(a或c)，则该连架杆相对于机架能整转。
+                    // 如果a是曲柄 -> 曲柄摇杆。如果a不是曲柄(c是) -> 摇杆曲柄(a摇动)。
+                    typeName = '曲柄摇杆 (或摇杆曲柄)';
+                    styleClass = 'bg-teal-100 text-teal-700 border-teal-200';
+                } else {
+                    // 连杆b最短
+                    typeName = '双摇杆机构 (Double Rocker)';
+                    styleClass = 'bg-amber-100 text-amber-700 border-amber-200';
+                }
+            } else {
+                // 不满足格拉霍夫条件
+                typeName = '双摇杆机构 (无整转副)';
+                styleClass = 'bg-amber-100 text-amber-700 border-amber-200';
+            }
+
+            // 物理约束检查：能否连接
+            // 任意三杆之和必须大于第四杆
+            const maxL = Math.max(a, b, c, d);
+            const sumRest = a + b + c + d - maxL;
+            if (maxL >= sumRest) {
+                typeName = '无法构成机构 (死点/断开)';
+                styleClass = 'bg-red-100 text-red-700 border-red-200';
+                state.isValid = false;
+            } else {
+                state.isValid = true;
+            }
+
+            els.typeDisplay.innerText = typeName;
+            els.typeContainer.className = `mb-6 p-4 rounded-lg text-center border transition-all duration-300 ${styleClass}`;
+            
+            // 只有当参数改变时更新二维码（防抖动可以加，这里简单处理）
+            generateQRCode();
+        }
+
+        // --- 绘图逻辑 ---
+        function draw() {
+            // 清空与设置
+            const w = els.canvas.width;
+            const h = els.canvas.height;
+            ctx.clearRect(0, 0, w, h);
+            
+            // 坐标变换：将原点移到画布中心
+            // 自适应缩放
+            const maxDimension = Math.max(config.b + config.c, state.frameLength) * 2.5;
+            const unit = Math.min(w, h) / maxDimension; 
+            
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+            ctx.scale(unit, unit);
+            // 稍微向下移一点让机构居中视觉更好
+            ctx.translate(0, 50);
+
+            // 计算节点坐标
+            // 机架 A(0,0) -> D(d, 0) 为了居中，我们让 A(-d/2, 0), D(d/2, 0)
+            const d = state.frameLength;
+            const Ax = -d / 2, Ay = 0;
+            const Dx = d / 2, Dy = 0;
+
+            // B点坐标 (主动杆 a)
+            const Bx = Ax + config.a * Math.cos(state.angle);
+            const By = Ay + config.a * Math.sin(state.angle);
+
+            // C点坐标 (交点计算)
+            // B为圆心半径b，D为圆心半径c，求交点
+            const distBD = Math.sqrt((Dx - Bx)**2 + (Dy - By)**2);
+            
+            // 几何防崩坏
+            let Cx, Cy;
+            if (distBD > config.b + config.c || distBD < Math.abs(config.b - config.c) || distBD === 0) {
+                // 无法构成三角形，机构卡死
+                // 保持上一帧或绘制断开
+                ctx.restore();
+                return; 
+            }
+
+            // 余弦定理求角度
+            const a2 = config.b**2;
+            const b2 = config.c**2;
+            const c2 = distBD**2;
+            
+            // 这里的alpha是 BD 线与 BC 线的夹角
+            const cosAlpha = (a2 + c2 - b2) / (2 * config.b * distBD);
+            const alpha = Math.acos(Math.min(Math.max(cosAlpha, -1), 1));
+            
+            // baseAngle 是 BD 线与水平线的夹角
+            const baseAngle = Math.atan2(Dy - By, Dx - Bx);
+            
+            // 通常有两个解，取上方解 (减去 alpha) 或 下方解
+            // 为了保持机构构型，我们需要根据初始状态或连续性选择
+            // 这里简单选取一个解
+            const theta = baseAngle - alpha; 
+            
+            Cx = Bx + config.b * Math.cos(theta);
+            Cy = By + config.b * Math.sin(theta);
+
+            // --- 绘制轨迹 ---
+            updateTracks(Bx, By, Cx, Cy);
+            drawPath(state.trackB, 'rgba(239, 68, 68, 0.3)');
+            drawPath(state.trackC, 'rgba(59, 130, 246, 0.3)');
+
+            // --- 绘制杆件 ---
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // 机架 D-A
+            drawLine(Dx, Dy, Ax, Ay, '#1e293b', 6);
+            // 主动杆 A-B
+            drawLine(Ax, Ay, Bx, By, '#ef4444', 5);
+            // 连杆 B-C
+            drawLine(Bx, By, Cx, Cy, '#3b82f6', 5);
+            // 从动杆 C-D
+            drawLine(Cx, Cy, Dx, Dy, '#22c55e', 5);
+
+            // --- 绘制节点 ---
+            drawNode(Ax, Ay);
+            drawNode(Dx, Dy);
+            drawNode(Bx, By, '#fff', '#ef4444');
+            drawNode(Cx, Cy, '#fff', '#3b82f6');
+
+            ctx.restore();
+        }
+
+        // --- 辅助绘图函数 ---
+        function drawLine(x1, y1, x2, y2, color, width) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.stroke();
+        }
+
+        function drawNode(x, y, fill = '#1e293b', stroke = 'none') {
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = fill;
+            ctx.fill();
+            if (stroke !== 'none') {
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function drawPath(points, color) {
+            if (points.length < 2) return;
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+        }
+
+        function updateTracks(Bx, By, Cx, Cy) {
+            state.trackB.push({x: Bx, y: By});
+            state.trackC.push({x: Cx, y: Cy});
+            if (state.trackB.length > 200) state.trackB.shift();
+            if (state.trackC.length > 200) state.trackC.shift();
+        }
+
+        // --- 动画循环 ---
+        function animate() {
+            if (state.isPlaying && state.isValid) {
+                state.angle += config.speed;
+            }
+            draw();
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // --- 交互处理 ---
+        function handleSliderChange(e) {
+            state.frameLength = parseInt(e.target.value);
+            // 清空轨迹以避免混乱
+            state.trackB = [];
+            state.trackC = [];
+            updateMechanismState();
+        }
+
+        function resizeCanvas() {
+            const parent = els.canvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            const rect = parent.getBoundingClientRect();
+            
+            els.canvas.width = rect.width * dpr;
+            els.canvas.height = rect.height * dpr;
+            els.canvas.style.width = `${rect.width}px`;
+            els.canvas.style.height = `${rect.height}px`;
+            
+            // 重新绘制
+            draw();
+        }
+
+        function togglePlay() {
+            state.isPlaying = !state.isPlaying;
+            els.playText.innerText = state.isPlaying ? '暂停' : '开始';
+            els.playIcon.innerText = state.isPlaying ? '⏸' : '▶';
+            
+            // 按钮样式切换
+            if(state.isPlaying) {
+                els.toggleBtn.classList.remove('bg-emerald-500', 'hover:bg-emerald-600');
+                els.toggleBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            } else {
+                els.toggleBtn.classList.add('bg-emerald-500', 'hover:bg-emerald-600');
+                els.toggleBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            }
+        }
+
+        function reset() {
+            state.frameLength = config.d;
+            state.angle = 0;
+            state.trackB = [];
+            state.trackC = [];
+            els.slider.value = config.d;
+            state.isPlaying = true;
+            updateMechanismState();
+            // 恢复按钮状态
+            els.playText.innerText = '暂停';
+            els.playIcon.innerText = '⏸';
+            els.toggleBtn.classList.remove('bg-emerald-500');
+            els.toggleBtn.classList.add('bg-blue-600');
+        }
+
+        // --- 二维码与链接逻辑 ---
+        function generateQRCode() {
+            // 获取当前基础URL（去掉问号后面的参数）
+            const baseUrl = window.location.href.split('?')[0];
+            // 生成带参数的链接，这样别人扫码打开时，机架长度和当前一样
+            const shareUrl = `${baseUrl}?frame=${state.frameLength}`;
+            
+            QRCode.toCanvas(els.qrCanvas, shareUrl, { 
+                width: 160,
+                margin: 1,
+                color: {
+                    dark: "#1e293b",
+                    light: "#ffffff"
+                }
+            }, function (error) {
+                if (error) console.error(error)
+            });
+        }
+
+        function copyLink() {
+            const baseUrl = window.location.href.split('?')[0];
+            const shareUrl = `${baseUrl}?frame=${state.frameLength}`;
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                const originalText = els.copyBtn.innerText;
+                els.copyBtn.innerText = "已复制！";
+                setTimeout(() => els.copyBtn.innerText = originalText, 2000);
+            });
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
