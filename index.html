@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>四杆机构教学演示系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         @keyframes pulse {
             0%, 100% { transform: scale(1); }
@@ -13,6 +13,10 @@
         }
         .animated-pulse {
             animation: pulse 2s infinite;
+        }
+        /* 修复二维码容器居中问题 */
+        #qrcode img {
+            margin: 0 auto;
         }
     </style>
 </head>
@@ -26,7 +30,6 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-xl font-semibold text-slate-700 mb-4 border-b pb-2">机构参数设置</h2>
-                
                 <div class="mb-4">
                     <h3 class="text-sm font-medium text-slate-600 mb-2">固定参数</h3>
                     <div class="grid grid-cols-2 gap-2">
@@ -74,10 +77,10 @@
             <div class="bg-white rounded-lg shadow-md p-6 flex flex-col items-center justify-center">
                 <h2 class="text-xl font-semibold text-slate-700 mb-4 text-center">学生互动二维码</h2>
                 
-                <canvas id="qrcode" class="mb-4 border border-slate-200 rounded-lg"></canvas>
+                <div id="qrcode" class="mb-4 border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center" style="width: 180px; height: 180px;"></div>
                 
                 <div class="text-center text-slate-600">
-                    <p class="mb-2">扫码参与四杆机构知识问答</p>
+                    <p class="mb-2 font-medium" id="qrTextStatus">扫码链接已生成</p>
                     <p class="text-sm text-slate-500">可在移动端查看机构运动演示</p>
                 </div>
             </div>
@@ -96,18 +99,11 @@
         let angle = 0;
         let ctx = null;
         let canvas = null;
+        let qrcodeObj = null; // 存储二维码对象
 
-        // 固定参数
-        const a = 90; 
-        const b = 210; 
-        const c = 150; 
-        const scale = 1; 
-        const centerX = 200; 
-        const centerY = 200; 
-
-        // 轨迹点
-        let track1 = []; 
-        let track2 = []; 
+        const a = 90; const b = 210; const c = 150; 
+        const scale = 1; const centerX = 200; const centerY = 200; 
+        let track1 = []; let track2 = []; 
 
         document.addEventListener('DOMContentLoaded', () => {
             canvas = document.getElementById('mechanismCanvas');
@@ -129,7 +125,8 @@
 
             // 2. 初始化
             updateMechanismType();
-            updateQRCode(frameLength);
+            // 延时一点点生成二维码，确保DOM完全就绪
+            setTimeout(() => updateQRCode(frameLength), 100);
             drawMechanism();
             animate();
 
@@ -138,10 +135,11 @@
                 frameLength = parseInt(e.target.value);
                 frameValue.textContent = `${frameLength} mm`;
                 updateMechanismType();
-                updateQRCode(frameLength); // 实时更新二维码
-                track1 = [];
-                track2 = [];
-                drawMechanism();
+                
+                // 防抖动：拖动结束再更新二维码，避免卡顿，但这里为了演示实时更新
+                updateQRCode(frameLength); 
+                
+                track1 = []; track2 = []; drawMechanism();
             });
 
             resetBtn.addEventListener('click', () => {
@@ -150,10 +148,7 @@
                 frameValue.textContent = `${frameLength} mm`;
                 updateMechanismType();
                 updateQRCode(frameLength);
-                track1 = [];
-                track2 = [];
-                angle = 0;
-                drawMechanism();
+                track1 = []; track2 = []; angle = 0; drawMechanism();
             });
 
             playBtn.addEventListener('click', () => {
@@ -166,32 +161,42 @@
             });
         });
 
-        // 二维码更新逻辑
+        // --- 核心修复：更稳定的二维码生成逻辑 ---
         function updateQRCode(length) {
-            const qrcodeCanvas = document.getElementById('qrcode');
-            // 获取当前链接（去掉参数部分）
+            const qrContainer = document.getElementById('qrcode');
+            const statusText = document.getElementById('qrTextStatus');
             const baseUrl = window.location.href.split('?')[0];
             const content = `${baseUrl}?frame=${length}`;
 
-            // 调用库生成二维码
-            // 注意：我们直接传 canvas 元素进去，不需要清空 innerHTML
-            if (typeof QRCode !== 'undefined') {
-                QRCode.toCanvas(qrcodeCanvas, content, {
-                    width: 200,
-                    margin: 1,
-                    color: {
-                        dark: '#000000',
-                        light: '#ffffff'
-                    }
-                }, function (error) {
-                    if (error) console.error(error);
+            // 检查库是否加载成功
+            if (typeof QRCode === 'undefined') {
+                statusText.innerText = "正在加载组件...";
+                statusText.style.color = "red";
+                return;
+            }
+
+            statusText.innerText = "扫码体验移动端";
+            statusText.style.color = "#4b5563";
+
+            // 如果对象已存在，直接清空并重新生成
+            // 注意：BootCDN 的 qrcode.js 使用 innerHTML 清空法最稳妥
+            qrContainer.innerHTML = ""; 
+            
+            try {
+                new QRCode(qrContainer, {
+                    text: content,
+                    width: 160,
+                    height: 160,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
                 });
-            } else {
-                console.error("二维码库加载失败，可能是网络原因");
+            } catch (e) {
+                console.error("二维码生成出错:", e);
+                statusText.innerText = "生成失败，请刷新";
             }
         }
 
-        // 机构类型判定
         function updateMechanismType() {
             const typeElement = document.getElementById('mechanismType');
             const d = frameLength;
@@ -217,28 +222,28 @@
                     if(type === '双摇杆机构') style = 'bg-purple-50 text-purple-700';
                 }
             } else {
-                type = '双摇杆机构 (无法整转)';
-                style = 'bg-purple-50 text-purple-700';
+                type = '无法构成机构 (死点/断开)';
+                style = 'bg-red-50 text-red-700';
             }
-
             typeElement.textContent = type;
             typeElement.className = `${style} p-4 rounded-lg text-center text-lg font-semibold animated-pulse`;
         }
 
-        // 绘图逻辑
         function drawMechanism() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const A = { x: centerX - frameLength * scale / 2, y: centerY };
             const D = { x: centerX + frameLength * scale / 2, y: centerY };
             const B = { x: A.x + a * scale * Math.cos(angle), y: A.y + a * scale * Math.sin(angle) };
 
-            const dx = D.x - B.x;
-            const dy = D.y - B.y;
+            const dx = D.x - B.x; const dy = D.y - B.y;
             const distBD = Math.sqrt(dx * dx + dy * dy);
 
-            // 简单的三角形存在性检查
+            // 物理约束检查
             if (distBD > b + c || distBD < Math.abs(b - c)) {
-                // 机构卡死，不绘制后续
+                // 如果构不成三角形，只画部分
+                drawNode(A); drawNode(D); drawNode(B);
+                drawLine(A, B, '#ef4444', 4);
+                drawLine(A, D, '#1e293b', 4);
                 return; 
             }
 
@@ -247,20 +252,14 @@
             const phi = Math.atan2(dy, dx);
             const C = { x: D.x - c * Math.cos(phi + theta), y: D.y - c * Math.sin(phi + theta) };
 
-            track1.push(B);
-            track2.push(C);
+            track1.push(B); track2.push(C);
             if (track1.length > 200) track1.shift();
             if (track2.length > 200) track2.shift();
 
-            // 绘制
             drawPath(track1, 'rgba(239, 68, 68, 0.4)');
             drawPath(track2, 'rgba(59, 130, 246, 0.4)');
-            
-            drawLine(A, D, '#1e293b', 4); // 机架
-            drawLine(A, B, '#ef4444', 4); // 主动
-            drawLine(B, C, '#3b82f6', 4); // 连杆
-            drawLine(C, D, '#22c55e', 4); // 从动
-
+            drawLine(A, D, '#1e293b', 4); drawLine(A, B, '#ef4444', 4);
+            drawLine(B, C, '#3b82f6', 4); drawLine(C, D, '#22c55e', 4);
             drawNode(A); drawNode(D); drawNode(B); drawNode(C);
         }
 
